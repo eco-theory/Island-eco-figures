@@ -3,6 +3,7 @@ import math
 import scipy.signal
 import pdb
 import sys
+import scipy.optimize as opt
 
 def nearAntisymRun(K,gamma,seed,time = 4):
     if K % 2 == 0:
@@ -608,4 +609,57 @@ def define_deriv_mainland(V,N,u,m,nbar,normed):
     return deriv
 
 
+def lv_to_lp(A):
+    """
+    Generate parameters for lp to find fixed points
+    :param A: antisymmetric matrix
+    :return c, A_ub, b_ub, A_eq, b_eq: linear program parameters for linprog from scipy.optimize.
+    """
+    N = np.shape(A)[0]
+    # augment value v of "game" to end of variables. Trying to minimize v.
+    c = np.zeros(N + 1)
+    c[-1] = 1
+
+    # inequality constraints
+
+    A_ub = np.zeros((N, N + 1))
+    b_ub = np.zeros(N)
+
+    # max fitness bounded by v
+
+    A_ub[:, :-1] = A
+    A_ub[:, -1] = -1
+
+    # equality constraint: probabilities sum to 1
+    A_eq = np.ones((1, N + 1))
+    A_eq[0, -1] = 0
+    b_eq = np.ones(1)
+
+    return c, A_ub, b_ub, A_eq, b_eq
+
+def find_fixed_pt(A):
+    """
+    Find saturated fixed point of antisymmetric LV model using linear programming
+    :param A: Interaction matrix
+    :return: saturated fixed point
+    """
+    N = np.shape(A)[0]
+    maxiter = int(np.max(((N**2)/25,1000)))
+    c, A_ub, b_ub, A_eq, b_eq = lv_to_lp(A)
+    result = opt.linprog(c,A_ub,b_ub,A_eq,b_eq,options={'maxiter':maxiter},method='interior-point')
+    if isinstance(result.x, float):
+        print(result)
+        print(result.message)
+    return result.x[:-1]
+
+def count_alive(fs,min_freq=None):
+    """
+    Count number of types with non-zero abundance
+    :param fs: array of frequencies
+    :param min_freq: cutoff frequency for measuring alive types
+    :return: Number of types with non-zero abundance
+    """
+    if min_freq==None:
+        min_freq = 1.0/len(fs)**2
+    return np.sum([f>min_freq for f in fs])
 
